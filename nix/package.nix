@@ -4,8 +4,9 @@
 #   nix build          # → ./result/bin/gridcraft, ./result/bin/gridcraft-cli
 #
 # Kept in step with the release workflow (.github/workflows/release.yml) and packaging/:
-#   * `Cargo.lock` drives the dependencies (`cargoLock`), so there is no vendorHash to bump — only
-#     crates.io, no git sources;
+#   * `Cargo.lock` drives the dependencies (`cargoLock`), so there is no vendorHash to bump. The
+#     git sources (storytold/craft-libs, winprint.rs and the egui fork) are fetched at the revisions
+#     the lock file pins;
 #   * the desktop file, hicolor icons, MIME types and AppStream metadata are the same files the
 #     .deb/.rpm ship (packaging/linux/), so `apt` and NixOS users see one identical GridCraft;
 #   * `CRAFT_FONTS_DIR` embeds the fonts from storytold/craft-fonts (the `craft-fonts` flake input, pinned to

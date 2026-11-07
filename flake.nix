@@ -2,17 +2,24 @@
   description = "GridCraft — spreadsheet, a free alternative to Excel, in pure Rust";
 
   inputs = {
-    # GridCraft needs edition 2024 and rustc ≥ 1.90, so the flake tracks unstable. Consumers on a
+    # GridCraft needs edition 2024 and rustc ≥ 1.95, so the flake tracks unstable. Consumers on a
     # release channel can retarget it: `inputs.gridcraft.inputs.nixpkgs.follows = "nixpkgs";`
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
     # Optional build input of the repository: the fonts that the build embeds when `CRAFT_FONTS_DIR`
     # is set. Official releases always build with them; without them everything works but some
-    # scripts have no glyphs. Pinned to the revision the release workflow uses — bump deliberately
-    # (`nix flake update craft-fonts`).
+    # scripts have no glyphs. Pinned to the `craft-fonts-ref` that ci.yml and release.yml use — bump
+    # all three together (`nix flake update craft-fonts`).
     craft-fonts = {
-      url = "github:storytold/craft-fonts/abb83316d96aa59c1cf64784289e378fe9fa5695";
+      url = "github:storytold/craft-fonts/b076417b5880bd4154bd22f00695b1d28c6bea83";
       flake = false;
+    };
+
+    # Dev shell only: nixpkgs' rustc has no wasm32 standard library, which `cargo xtask wasm` (part
+    # of `cargo xtask ci`) and trunk need. The package builds with nixpkgs' rustPlatform.
+    rust-overlay = {
+      url = "github:oxalica/rust-overlay";
+      inputs.nixpkgs.follows = "nixpkgs";
     };
   };
 
@@ -21,6 +28,7 @@
       self,
       nixpkgs,
       craft-fonts,
+      rust-overlay,
     }:
     let
       inherit (nixpkgs) lib;
@@ -71,6 +79,11 @@
             type = "app";
             program = lib.getExe self.packages.${system}.gridcraft;
           };
+          # `nix run .#cli -- eval '=SUM(1,2,3)'`
+          cli = {
+            type = "app";
+            program = lib.getExe' self.packages.${system}.gridcraft "gridcraft-cli";
+          };
         }
       );
 
@@ -78,22 +91,40 @@
         pkgs: system:
         let
           gridcraft = self.packages.${system}.gridcraft;
+          tools = pkgs.callPackage ./nix/tools.nix { };
+          # Stable Rust with the wasm32 target and the components `cargo xtask ci` runs.
+          rust = (rust-overlay.lib.mkRustBin { } pkgs).stable.latest.default.override {
+            targets = [ "wasm32-unknown-unknown" ];
+            extensions = [
+              "rust-src"
+              "rust-analyzer"
+              "clippy"
+              "rustfmt"
+            ];
+          };
         in
         {
           default = pkgs.mkShell (
             {
               # The package's own native inputs, so `cargo build` in the shell needs no extra setup.
               inputsFrom = [ gridcraft ];
-              packages = with pkgs; [
-                cargo
-                rustc
-                clippy
-                rustfmt
-                rust-analyzer
+              packages = [
+                rust
+                # `cargo xtask test` uses nextest when it is installed.
+                tools.cargo-nextest
+                # The web build: `cd apps/gridcraft-web && trunk serve --release`.
+                pkgs.trunk
+                tools.wasm-bindgen-cli
+                # `cargo xtask assets` lists the tracked files with git.
+                pkgs.git
+                pkgs.nixfmt
               ];
               # `cargo run` dlopens the Vulkan loader, libwayland and libxkbcommon like the packaged binary.
               LD_LIBRARY_PATH = lib.makeLibraryPath gridcraft.passthru.runtimeLibs;
               RUST_BACKTRACE = "1";
+              shellHook = ''
+                echo "GridCraft dev shell: 'cargo xtask ci' runs every gate (see docs/nix.md)."
+              '';
             }
             // lib.optionalAttrs (craft-fonts != null) {
               # Embedded fonts in `cargo run` too; build.rs reads this as CRAFT_FONTS_DIR.

@@ -116,6 +116,8 @@ cargo run --release -p gridcraft -- --sample sales --control 7979   # + JSON con
 cargo xtask ci                                                 # fmt, clippy, tests, assets, layering, wasm
 ```
 
+Using Nix? `nix develop` gives you every tool above at the right version; see [`docs/nix.md`](docs/nix.md).
+
 Choose Español under View → Interface language for [Spanish formula names, decimal commas, and semicolon arguments](docs/formula-input.md).
 Workbooks, clipboard exchange, and programmatic APIs retain canonical English syntax.
 
